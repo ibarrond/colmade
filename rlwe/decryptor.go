@@ -11,6 +11,10 @@ type Decryptor interface {
 	// The level of the output plaintext is min(ciphertext.Level(), plaintext.Level())
 	// Output domain will match plaintext.Value.IsNTT value.
 	Decrypt(ciphertext *Ciphertext, plaintext *Plaintext)
+	Params() Parameters
+	RingQ() *ring.Ring
+	Pool() *ring.Poly
+	SecretKey() *SecretKey
 }
 
 // decryptor is a structure used to decrypt ciphertext. It stores the secret-key.
@@ -19,6 +23,26 @@ type decryptor struct {
 	ringQ  *ring.Ring
 	pool   *ring.Poly
 	sk     *SecretKey
+}
+
+// getter for Parameters
+func (decryptor *decryptor) Params() Parameters {
+	return decryptor.params
+}
+
+// getter for RingQ
+func (decryptor *decryptor) RingQ() *ring.Ring {
+	return decryptor.ringQ
+}
+
+// getter for Pool
+func (decryptor *decryptor) Pool() *ring.Poly {
+	return decryptor.pool
+}
+
+// getter for SecretKey
+func (decryptor *decryptor) SecretKey() *SecretKey {
+	return decryptor.sk
 }
 
 // NewDecryptor instantiates a new generic RLWE Decryptor.

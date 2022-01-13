@@ -11,6 +11,8 @@ type Encryptor interface {
 	EncryptNew(plaintext *Plaintext) *Ciphertext
 	EncryptFromCRP(plaintext *Plaintext, crp *ring.Poly, ctOut *Ciphertext)
 	EncryptFromCRPNew(plaintext *Plaintext, crp *ring.Poly) *Ciphertext
+	RlweEncryptor() rlwe.Encryptor
+	Params() Parameters
 }
 
 type encryptor struct {
@@ -29,6 +31,16 @@ func NewEncryptor(params Parameters, key interface{}) Encryptor {
 // This method is faster than the normal encryptor but result in a noisier ciphertext.
 func NewFastEncryptor(params Parameters, key *rlwe.PublicKey) Encryptor {
 	return &encryptor{rlwe.NewFastEncryptor(params.Parameters, key), params}
+}
+
+// Encryptor returns the underlying rlwe.Encryptor.
+func (enc *encryptor) RlweEncryptor() rlwe.Encryptor {
+	return enc.Encryptor
+}
+
+// Params returns the underlying Parameters.
+func (enc *encryptor) Params() Parameters {
+	return enc.params
 }
 
 // Encrypt encrypts the input plaintext and write the result on ctOut.

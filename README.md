@@ -1,3 +1,18 @@
+
+# Colmade: Collaborative Masked Decryption for BFV
+This modified version of the `lattigo` library includes the Colmade protocol for the BFV scheme, which is a protocol for performing a collective masked decryption of a ciphertext encrypted with the BFV scheme.
+
+- Authors: Alberto Ibarrondo, Hervé Chabanne, Melek Onen
+- License: ©IDEMIA&EURECOM 2022. All rights reserved
+
+------------------------------------
+------------------------------------
+Below we have the original README of the lattigo library
+
+------------------------------------
+------------------------------------
+
+
 # Lattigo: lattice-based multiparty homomorphic encryption library in Go
 
 <p align="center">

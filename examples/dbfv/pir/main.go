@@ -84,7 +84,7 @@ func main() {
 	// arg2: number of Go routines
 	// MinDelta number of parties for n=8192: 512 parties (this is a memory intensive process)
 
-	N := 3 // Default number of parties
+	N := 8 // Default number of parties
 	var err error
 	if len(os.Args[1:]) >= 1 {
 		N, err = strconv.Atoi(os.Args[1])

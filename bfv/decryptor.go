@@ -8,6 +8,8 @@ import (
 type Decryptor interface {
 	DecryptNew(ciphertext *Ciphertext) (plaintext *Plaintext)
 	Decrypt(ciphertext *Ciphertext, plaintext *Plaintext)
+	Params() Parameters
+	RlweDecryptor() rlwe.Decryptor
 }
 
 type decryptor struct {
@@ -30,4 +32,14 @@ func (dec *decryptor) DecryptNew(ct *Ciphertext) (ptOut *Plaintext) {
 	pt := NewPlaintext(dec.params)
 	dec.Decryptor.Decrypt(ct.Ciphertext, pt.Plaintext)
 	return pt
+}
+
+// Getter for the BFV scheme parameters.
+func (dec *decryptor) Params() Parameters {
+	return dec.params
+}
+
+// Getter for the rlwe.Decryptor.
+func (dec *decryptor) RlweDecryptor() rlwe.Decryptor {
+	return dec.Decryptor
 }

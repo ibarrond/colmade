@@ -32,7 +32,7 @@ func runTimedParty(f func(), N int) time.Duration {
 	return time.Duration(time.Since(start).Nanoseconds() / int64(N))
 }
 
-type party struct {
+type Party struct {
 	sk         *rlwe.SecretKey
 	rlkEphemSk *rlwe.SecretKey
 
@@ -153,7 +153,7 @@ func main() {
 
 }
 
-func encPhase(params bfv.Parameters, P []*party, pk *rlwe.PublicKey, encoder bfv.Encoder) (encInputs []*bfv.Ciphertext) {
+func encPhase(params bfv.Parameters, P []*Party, pk *rlwe.PublicKey, encoder bfv.Encoder) (encInputs []*bfv.Ciphertext) {
 
 	l := log.New(os.Stderr, "", 0)
 
@@ -251,12 +251,12 @@ func evalPhase(params bfv.Parameters, NGoRoutine int, encInputs []*bfv.Ciphertex
 	return
 }
 
-func genparties(params bfv.Parameters, N int) []*party {
+func genparties(params bfv.Parameters, N int) []*Party {
 
 	// Create each party, and allocate the memory for all the shares that the protocols will need
-	P := make([]*party, N)
+	P := make([]*Party, N)
 	for i := range P {
-		pi := &party{}
+		pi := &Party{}
 		pi.sk = bfv.NewKeyGenerator(params).GenSecretKey()
 
 		P[i] = pi
@@ -265,7 +265,7 @@ func genparties(params bfv.Parameters, N int) []*party {
 	return P
 }
 
-func genInputs(params bfv.Parameters, P []*party) (expRes []uint64) {
+func genInputs(params bfv.Parameters, P []*Party) (expRes []uint64) {
 
 	expRes = make([]uint64, params.N())
 	for i := range expRes {
@@ -287,7 +287,7 @@ func genInputs(params bfv.Parameters, P []*party) (expRes []uint64) {
 	return
 }
 
-func pcksPhase(params bfv.Parameters, tpk *rlwe.PublicKey, encRes *bfv.Ciphertext, P []*party) (encOut *bfv.Ciphertext) {
+func pcksPhase(params bfv.Parameters, tpk *rlwe.PublicKey, encRes *bfv.Ciphertext, P []*Party) (encOut *bfv.Ciphertext) {
 
 	l := log.New(os.Stderr, "", 0)
 
@@ -322,7 +322,7 @@ func pcksPhase(params bfv.Parameters, tpk *rlwe.PublicKey, encRes *bfv.Ciphertex
 
 }
 
-func rkgphase(params bfv.Parameters, crs utils.PRNG, P []*party) *rlwe.RelinearizationKey {
+func rkgphase(params bfv.Parameters, crs utils.PRNG, P []*Party) *rlwe.RelinearizationKey {
 	l := log.New(os.Stderr, "", 0)
 
 	l.Println("> RKG Phase")
@@ -367,7 +367,7 @@ func rkgphase(params bfv.Parameters, crs utils.PRNG, P []*party) *rlwe.Relineari
 	return rlk
 }
 
-func ckgphase(params bfv.Parameters, crs utils.PRNG, P []*party) *rlwe.PublicKey {
+func ckgphase(params bfv.Parameters, crs utils.PRNG, P []*Party) *rlwe.PublicKey {
 
 	l := log.New(os.Stderr, "", 0)
 
