@@ -3,6 +3,7 @@ package bfv
 import (
 	"github.com/ldsec/lattigo/v2/ring"
 	"github.com/ldsec/lattigo/v2/rlwe"
+	"github.com/ldsec/lattigo/v2/utils"
 )
 
 // Encryptor an encryption interface for the BFV scheme.
@@ -24,6 +25,12 @@ type encryptor struct {
 // be either a *rlwe.PublicKey or a *rlwe.SecretKey.
 func NewEncryptor(params Parameters, key interface{}) Encryptor {
 	return &encryptor{rlwe.NewEncryptor(params.Parameters, key), params}
+}
+
+// NewEncryptor instantiates a new Encryptor for the BFV scheme. The key argument can
+// be either a *rlwe.PublicKey or a *rlwe.SecretKey and a prng. FOR TESTING ONLY.
+func NewTestEncryptor(params Parameters, key interface{}, prng *utils.KeyedPRNG) Encryptor {
+	return &encryptor{rlwe.NewTestEncryptor(params.Parameters, key, prng), params}
 }
 
 // NewFastEncryptor instantiates a new Encryptor for the BFV scheme.

@@ -3,8 +3,9 @@ package ring
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/ldsec/lattigo/v2/utils"
 	"math/bits"
+
+	"github.com/ldsec/lattigo/v2/utils"
 )
 
 // Poly is the structure that contains the coefficients of a polynomial.

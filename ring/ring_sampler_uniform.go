@@ -2,6 +2,7 @@ package ring
 
 import (
 	"encoding/binary"
+	"math/bits"
 
 	"github.com/ldsec/lattigo/v2/utils"
 )
@@ -19,6 +20,46 @@ func NewUniformSampler(prng utils.PRNG, baseRing *Ring) *UniformSampler {
 	uniformSampler.prng = prng
 	uniformSampler.randomBufferN = make([]byte, baseRing.N)
 	return uniformSampler
+}
+
+// ReadArr generates a new even-valued array, with coefficients following a
+//  uniform distribution over the even values in [0, maxVal-1].
+func (uniformSampler *UniformSampler) ReadEvenArrNew(maxVal uint64) (arr []uint64) {
+
+	arr = make([]uint64, uniformSampler.baseRing.N)
+
+	var randomUint, mask uint64
+	var ptr int
+
+	uniformSampler.prng.Clock(uniformSampler.randomBufferN)
+
+	// Start by computing the mask
+	mask = (1 << (bits.Len64(maxVal) - 1)) - 1
+
+	// Iterate over each element
+	for i := 0; i < uniformSampler.baseRing.N; i++ {
+
+		// Sample an integer between [0, maxVal-1]
+		for {
+
+			// Refill the pool if it runs empty
+			if ptr == uniformSampler.baseRing.N {
+				uniformSampler.prng.Clock(uniformSampler.randomBufferN)
+				ptr = 0
+			}
+
+			// Read bytes from the pool
+			randomUint = (binary.BigEndian.Uint64(uniformSampler.randomBufferN[ptr:ptr+8]) & mask) * 2
+			ptr += 8
+
+			// If the integer is between [0, maxVal-1], break the loop
+			if randomUint < maxVal {
+				break
+			}
+		}
+		arr[i] = randomUint
+	}
+	return
 }
 
 // Read generates a new polynomial with coefficients following a uniform distribution over [0, Qi-1].

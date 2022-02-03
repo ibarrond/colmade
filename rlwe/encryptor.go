@@ -71,6 +71,30 @@ func NewEncryptor(params Parameters, key interface{}) Encryptor {
 	}
 }
 
+// NewEncryptor instatiates a new generic RLWE Encryptor. The key argument can
+// be either a *rlwe.PublicKey or a *rlwe.SecretKey.
+func NewTestEncryptor(params Parameters, key interface{}, prng *utils.KeyedPRNG) Encryptor {
+	switch key := key.(type) {
+	case *PublicKey:
+		if key.Value[0].Q.Degree() != params.N() || key.Value[1].Q.Degree() != params.N() {
+			panic("cannot newEncryptor: pk ring degree does not match params ring degree")
+		}
+		encryptorBase := newTestEncryptorBase(params, prng)
+		if params.PCount() > 0 {
+			baseconverter := ring.NewFastBasisExtender(params.ringQ, params.ringP)
+			return &PkEncryptor{encryptorBase, key, baseconverter}
+		}
+		return &PkFastEncryptor{encryptorBase, key}
+	case *SecretKey:
+		if key.Value.Q.Degree() != params.N() {
+			panic("cannot newEncryptor: sk ring degree does not match params ring degree")
+		}
+		return &SkEncryptor{newTestEncryptorBase(params, prng), key}
+	default:
+		panic("key must be either rlwe.PublicKey or rlwe.SecretKey")
+	}
+}
+
 // NewFastEncryptor instantiates a new  generic RLWE Encryptor.
 // This encryptor's Encrypt method first encrypts zero in Q and then adds the plaintext.
 // This method is faster than the normal encryptor but result in a noisier ciphertext.
@@ -303,6 +327,29 @@ func newEncryptorBase(params Parameters) EncryptorBase {
 	if err != nil {
 		panic(err)
 	}
+
+	var poolP [3]*ring.Poly
+	if params.PCount() != 0 {
+		poolP = [3]*ring.Poly{ringP.NewPoly(), ringP.NewPoly(), ringP.NewPoly()}
+	}
+
+	return EncryptorBase{
+		Params:          params,
+		RingQ:           ringQ,
+		RingP:           ringP,
+		PoolQ:           [1]*ring.Poly{ringQ.NewPoly()},
+		PoolP:           poolP,
+		GaussianSampler: ring.NewGaussianSampler(prng, ringQ, params.Sigma(), int(6*params.Sigma())),
+		TernarySampler:  ring.NewTernarySampler(prng, ringQ, 0.5, false),
+		UniformSampler:  ring.NewUniformSampler(prng, ringQ),
+	}
+}
+
+// For Test purposes only!
+func newTestEncryptorBase(params Parameters, prng *utils.KeyedPRNG) EncryptorBase {
+
+	ringQ := params.RingQ()
+	ringP := params.RingP()
 
 	var poolP [3]*ring.Poly
 	if params.PCount() != 0 {

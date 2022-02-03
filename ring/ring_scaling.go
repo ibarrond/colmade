@@ -286,7 +286,6 @@ func (ss *SimpleScaler) reconstructAndScale(p1, p2 *Poly) {
 }
 
 // ============== Scaling-related methods ==============
-
 // DivFloorByLastModulusNTTLvl divides (floored) the polynomial by its last modulus. The input must be in the NTT domain.
 // Output poly level must be equal or one less than input level.
 func (r *Ring) DivFloorByLastModulusNTTLvl(level int, p0, pool, p1 *Poly) {

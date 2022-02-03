@@ -11,6 +11,7 @@ import (
 // KeyGenerator is an interface implementing the methods of the KeyGenerator.
 type KeyGenerator interface {
 	GenSecretKey() (sk *SecretKey)
+	GenTestSecretKey(prng *utils.KeyedPRNG) (sk *SecretKey)
 	GenSecretKeyGaussian() (sk *SecretKey)
 	GenSecretKeyWithDistrib(p float64) (sk *SecretKey)
 	GenSecretKeySparse(hw int) (sk *SecretKey)
@@ -36,6 +37,20 @@ type keyGenerator struct {
 	gaussianSamplerQ *ring.GaussianSampler
 	uniformSamplerQ  *ring.UniformSampler
 	uniformSamplerP  *ring.UniformSampler
+}
+
+// NewTestKeyGenerator creates a new KeyGenerator with a controllable prng, from which the secret and public keys, as well as the evaluation,
+// rotation and switching keys can be generated. FOR DEBUG PURPOSES ONLY
+func NewTestKeyGenerator(params Parameters, prng *utils.KeyedPRNG) KeyGenerator {
+
+	return &keyGenerator{
+		params:           params,
+		poolQ:            params.RingQ().NewPoly(),
+		poolQP:           params.RingQP().NewPoly(),
+		gaussianSamplerQ: ring.NewGaussianSampler(prng, params.RingQ(), params.Sigma(), int(6*params.Sigma())),
+		uniformSamplerQ:  ring.NewUniformSampler(prng, params.RingQ()),
+		uniformSamplerP:  ring.NewUniformSampler(prng, params.RingP()),
+	}
 }
 
 // NewKeyGenerator creates a new KeyGenerator, from which the secret and public keys, as well as the evaluation,
@@ -65,6 +80,12 @@ func (keygen *keyGenerator) GenSecretKey() (sk *SecretKey) {
 // GenSecretKey generates a new SecretKey with the error distribution.
 func (keygen *keyGenerator) GenSecretKeyGaussian() (sk *SecretKey) {
 	return keygen.genSecretKeyFromSampler(keygen.gaussianSamplerQ)
+}
+
+// GenSecretKey generates a new SecretKey with the distribution [(p-1)/2, p, (p-1)/2]. FOR TESTING ONLY
+func (keygen *keyGenerator) GenTestSecretKey(prng *utils.KeyedPRNG) (sk *SecretKey) {
+	ternarySamplerMontgomery := ring.NewTernarySampler(prng, keygen.params.RingQ(), 1.0/3, false)
+	return keygen.genSecretKeyFromSampler(ternarySamplerMontgomery)
 }
 
 // GenSecretKeyWithDistrib generates a new SecretKey with the distribution [(p-1)/2, p, (p-1)/2].
