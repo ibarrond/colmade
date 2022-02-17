@@ -38,6 +38,8 @@ const GaloisGen uint64 = 5
 //
 type Encoder interface {
 	EncodeUint(coeffs []uint64, pt *Plaintext)
+	EncodeUintNoRot(coeffs []uint64, pt *Plaintext)
+	EncodeUintBare(coeffs []uint64, pt *Plaintext)
 	EncodeUintRingT(coeffs []uint64, pt *PlaintextRingT)
 	EncodeUintMul(coeffs []uint64, pt *PlaintextMul)
 	EncodeInt(coeffs []int64, pt *Plaintext)
@@ -51,7 +53,8 @@ type Encoder interface {
 
 	DecodeRingT(pt interface{}, ptRt *PlaintextRingT)
 	DecodeUint(pt interface{}, coeffs []uint64)
-	DecodeInt(pt interface{}, coeffs []int64)
+	DecodeUintNoRot(pt interface{}, coeffs []uint64)
+	DecodeUintBare(pt interface{}, coeffs []uint64)
 	DecodeUintNew(pt interface{}) (coeffs []uint64)
 	DecodeIntNew(pt interface{}) (coeffs []int64)
 }
@@ -112,6 +115,42 @@ func NewEncoder(params Parameters) Encoder {
 		tmpPoly:       ringT.NewPoly(),
 		tmpPtRt:       NewPlaintextRingT(params),
 	}
+}
+
+// EncodeUint encodes an uint64 slice of size at most N on a plaintext.
+func (encoder *encoder) EncodeUintNoRot(coeffs []uint64, p *Plaintext) {
+	ptRt := &PlaintextRingT{p.Plaintext}
+
+	// Encodes the values in RingT
+	for i := 0; i < len(coeffs); i++ {
+		p.Value.Coeffs[0][i] = coeffs[i]
+	}
+
+	for i := len(coeffs); i < len(encoder.indexMatrix); i++ {
+		p.Value.Coeffs[0][i] = 0
+	}
+
+	encoder.params.RingT().InvNTT(p.Value, p.Value)
+
+	// Scales by Q/t
+	encoder.ScaleUp(ptRt, p)
+}
+
+// EncodeUint encodes an uint64 slice of size at most N on a plaintext, without support for rotation nor support for packed multiplication
+func (encoder *encoder) EncodeUintBare(coeffs []uint64, p *Plaintext) {
+	ptRt := &PlaintextRingT{p.Plaintext}
+
+	// Encodes the values in RingT
+	for i := 0; i < len(coeffs); i++ {
+		p.Value.Coeffs[0][i] = coeffs[i]
+	}
+
+	for i := len(coeffs); i < len(encoder.indexMatrix); i++ {
+		p.Value.Coeffs[0][i] = 0
+	}
+
+	// Scales by Q/t
+	encoder.ScaleUp(ptRt, p)
 }
 
 // EncodeUintRingT encodes a slice of uint64 into a Plaintext in R_t
@@ -299,6 +338,38 @@ func (encoder *encoder) DecodeRingT(p interface{}, ptRt *PlaintextRingT) {
 		ptRt.Copy(pt.Plaintext)
 	default:
 		panic(fmt.Errorf("unsupported plaintext type (%T)", pt))
+	}
+}
+
+// DecodeUint decodes a any plaintext type and write the coefficients in coeffs. It panics if p is not PlaintextRingT, Plaintext or PlaintextMul.
+func (encoder *encoder) DecodeUintNoRot(p interface{}, coeffs []uint64) {
+
+	var ptRt *PlaintextRingT
+	var isInRingT bool
+	if ptRt, isInRingT = p.(*PlaintextRingT); !isInRingT {
+		encoder.DecodeRingT(p, encoder.tmpPtRt)
+		ptRt = encoder.tmpPtRt
+	}
+
+	encoder.params.RingT().NTT(ptRt.Value, encoder.tmpPoly)
+
+	for i := 0; i < encoder.params.RingQ().N; i++ {
+		coeffs[i] = encoder.tmpPoly.Coeffs[0][i]
+	}
+}
+
+// DecodeUint decodes a any plaintext type and write the coefficients in coeffs. It panics if p is not PlaintextRingT, Plaintext or PlaintextMul. Decodes without rotation nor NTT
+func (encoder *encoder) DecodeUintBare(p interface{}, coeffs []uint64) {
+
+	var ptRt *PlaintextRingT
+	var isInRingT bool
+	if ptRt, isInRingT = p.(*PlaintextRingT); !isInRingT {
+		encoder.DecodeRingT(p, encoder.tmpPtRt)
+		ptRt = encoder.tmpPtRt
+	}
+
+	for i := 0; i < encoder.params.RingQ().N; i++ {
+		coeffs[i] = ptRt.Value.Coeffs[0][i]
 	}
 }
 

@@ -1,10 +1,8 @@
-package main
+package colmade
 
 import (
 	"fmt"
-	"log"
 	"math/big"
-	"os"
 	"unsafe"
 
 	"github.com/ldsec/lattigo/v2/bfv"
@@ -13,80 +11,9 @@ import (
 	"github.com/ldsec/lattigo/v2/utils"
 )
 
-func check(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-// ------------------------- CONFIGURABLE PARAMS ---------------------------- //
-var PLAINTEXT_MOD = uint64(65537)
-var MAX_MASK_VAL = PLAINTEXT_MOD / 3
-
-// -------------------------------------------------------------------------- //
-
-func main() {
-
-	// ···························· GLOBAL SETUP ···························· //
-	var err error
-	l := log.New(os.Stderr, "", 0)
-	prng, err := utils.NewKeyedPRNG([]byte("idemia"))
-	if err != nil {
-		panic(err)
-	}
-
-	// Creating encryption parameters from a default params with logN=13, logQP=218
-	//  with a plaintext modulus T=65537
-	paramsDef := bfv.PN13QP218
-	paramsDef.T = PLAINTEXT_MOD
-	params, err := bfv.NewParametersFromLiteral(paramsDef)
-	if err != nil {
-		panic(err)
-	}
-
-	// Create encoder
-	encoder := bfv.NewEncoder(params)
-	// Create keys
-	// -> bfv.NewKeyGenerator(params) for non-debug (non seeded)
-	keygen := rlwe.NewTestKeyGenerator(params.Parameters, prng)
-	sk := keygen.GenTestSecretKey(prng)
-	pk := keygen.GenPublicKey(sk)
-	// -> bfv.NewEncryptor(params, pk) for non-debug (non seeded)
-	encryptor := bfv.NewTestEncryptor(params, pk, prng)
-	maskDecryptor := NewMaskedDecryptor(params, sk, prng, MAX_MASK_VAL)
-
-	// Generate input
-	input := make([]uint64, params.N())
-	for i := range input {
-		input[i] = uint64(i)
-	}
-
-	// ·························· ENCRYPTION PHASE ·························· //
-	p := bfv.NewPlaintext(params)
-	encoder.EncodeUint(input, p)
-	ctxt := encryptor.EncryptNew(p)
-
-	// ·························· EVALUATION PHASE ·························· //
-	// Nothing for the moment, but to be used for encrypted computation
-
-	// ························MASKED DECRYPTION PHASE ······················ //
-	p_decr := maskDecryptor.DecryptMaskedNew(ctxt) // Modified Decryption!
-	res := encoder.DecodeUintNew(p_decr)
-
-	// Check result: LSB of all coefficients must be the same as that in input
-	l.Printf("\t%v\n", res[:16])
-	for i := range res {
-		if res[i]%2 != input[i]%2 {
-			l.Println("\tincorrect")
-			return
-		}
-	}
-	l.Println("\tcorrect")
-}
-
 // --------------------------- MASKED DECRYPTION ---------------------------- //
 
-type MaskedDecryptor struct {
+type MaskDecryptor struct {
 	params bfv.Parameters
 	sk     *rlwe.SecretKey
 
@@ -100,13 +27,13 @@ type MaskedDecryptor struct {
 	tmpPoly       *ring.Poly
 }
 
-func NewMaskedDecryptor(params bfv.Parameters, sk *rlwe.SecretKey, prng *utils.KeyedPRNG, maxMaskVal uint64) *MaskedDecryptor {
+func NewMaskDecryptor(params bfv.Parameters, sk *rlwe.SecretKey, prng *utils.KeyedPRNG, maxMaskVal uint64) *MaskDecryptor {
 
 	rescaleParams := make([]uint64, len(params.RingQ().Modulus))
 	for i, qi := range params.RingQ().Modulus {
 		rescaleParams[i] = ring.MForm(ring.ModExp(params.T(), qi-2, qi), qi, params.RingQ().BredParams[i])
 	}
-	return &MaskedDecryptor{
+	return &MaskDecryptor{
 		params:        params,
 		sk:            sk,
 		unifSampler:   ring.NewUniformSampler(prng, params.RingT()),
@@ -140,23 +67,27 @@ func GetIndexMatrixNew(params bfv.Parameters) (indexMatrix []uint64) {
 }
 
 // Generate an even numbered mask
-func (mdcr *MaskedDecryptor) GenMaskArrayNew() (mask_arr []uint64) {
+func (mdcr *MaskDecryptor) GenMaskArrayNew() (mask_arr []uint64) {
 	return mdcr.unifSampler.ReadEvenArrNew(mdcr.maxMaskVal)
 }
 
 // Generate an even numbered mask polynomial
-func (mdcr *MaskedDecryptor) GenMaskPolyNew() (mask_poly *ring.Poly) {
+func (mdcr *MaskDecryptor) GenMaskPolyNew() (mask_poly *ring.Poly) {
 	mask_poly = mdcr.params.RingQ().NewPoly()
 
 	// Generate seeded []uint64 mask of even values
 	mask_arr := mdcr.GenMaskArrayNew()
 
-	// Spread/shuffle coefficients for mask BFV encoding
+	// // To perform cyclic rotations instead of anticyclic
+	// //   -> NOT NEEDED! mask elementscan fall on any position
+	// for i := 0; i < mdcr.params.N(); i++ {
+	// 	mask_poly.Coeffs[0][mdcr.indexMatrix[i]] = mask_arr[i]
+	// }
 	for i := 0; i < mdcr.params.N(); i++ {
-		mask_poly.Coeffs[0][mdcr.indexMatrix[i]] = mask_arr[i]
+		mask_poly.Coeffs[0][i] = mask_arr[i]
 	}
 
-	// Final inverse NTT for spread encoding
+	// Final inverse NTT for coefficient-wise multiplication instead of polynomial
 	mdcr.params.RingT().InvNTT(mask_poly, mask_poly)
 
 	// Apply round((m*Q)/T) mod Q
@@ -165,8 +96,8 @@ func (mdcr *MaskedDecryptor) GenMaskPolyNew() (mask_poly *ring.Poly) {
 	return
 }
 
-// takes a poly a mod T and returns round((a*Q)/T) mod Q
-func (mdcr *MaskedDecryptor) scaleUp(pIn, pOut *ring.Poly) {
+// takes a poly pIn mod T and returns round((pIn*Q)/T) mod Q
+func (mdcr *MaskDecryptor) scaleUp(pIn, pOut *ring.Poly) {
 	ringQ := mdcr.params.RingQ()
 	ringT := mdcr.params.RingT()
 	tmp := mdcr.tmpPoly.Coeffs[0]
@@ -222,35 +153,32 @@ func (mdcr *MaskedDecryptor) scaleUp(pIn, pOut *ring.Poly) {
 // Decrypt decrypts the ciphertext and write the result in ptOut.
 // The level of the output plaintext is min(ciphertext.Level(), plaintext.Level())
 // Output domain will match plaintext.Value.IsNTT value.
-func (mdcr *MaskedDecryptor) DecryptMaskedNew(ct *bfv.Ciphertext) (ptOut *bfv.Plaintext) {
+func (mdcr *MaskDecryptor) DecryptMaskedNew(ct *bfv.Ciphertext) (ptOut *bfv.Plaintext) {
 	pt := bfv.NewPlaintext(mdcr.params)
+	ringQ := mdcr.params.RingQ()
 	temp := mdcr.sk.Value.Q.CopyNew()
 
-	ringQ := mdcr.params.RingQ()
-
-	// Copy c1 to p, and transform to Non-NTT if not done already
-	if ct.Value[0].IsNTT {
+	// Copy c1 to p, and transform to InvNTT if not done already
+	if ct.Value[1].IsNTT {
 		ringQ.InvNTT(ct.Value[1], pt.Value)
 	} else {
 		ring.CopyValues(ct.Value[1], pt.Value)
 	}
 
 	// c1 * sk
+	// ringQ.MulCoeffsMontgomery(pt.Value, mdcr.sk.Value.Q, pt.Value)
 	ringQ.NTT(pt.Value, pt.Value)
 	ringQ.InvMForm(temp, temp)
 	ringQ.MulCoeffs(pt.Value, temp, pt.Value)
 	ringQ.InvNTT(pt.Value, pt.Value)
 
-	// ---------------------------------------------------------------------
+	// -------------------------------------------------------------------------
 	// Our modification:
 	// + ei
 	ei := mdcr.gausSampler.ReadNew()
 	ringQ.AddNoMod(pt.Value, ei, pt.Value)
-	// + mask
-	mask := mdcr.GenMaskPolyNew()
-	ringQ.AddNoMod(pt.Value, mask, pt.Value)
 
-	// ---------------------------------------------------------------------
+	// -------------------------------------------------------------------------
 	// + c0
 	if ct.Value[0].IsNTT {
 		ringQ.InvNTTLazy(ct.Value[0], temp)
@@ -261,6 +189,26 @@ func (mdcr *MaskedDecryptor) DecryptMaskedNew(ct *bfv.Ciphertext) (ptOut *bfv.Pl
 
 	// mod q
 	ringQ.Reduce(pt.Value, pt.Value)
+
+	// -------------------------------------------------------------------------
+	// Our modification:
+	// + mask
+	ri := mdcr.GenMaskPolyNew()
+	// cri := bfv.NewCiphertext(mdcr.params, 1)
+	// bfv.NewTestEncryptor(mdcr.params, mdcr.sk.Value.Q, mdcr.prng).Encrypt(ri, cri)
+	ringQ.AddNoMod(pt.Value, ri, pt.Value)
+	// -------------------------------------------------------------------------
+
+	// mod Q-delta
+	ringQ.NTT(pt.Value, pt.Value)
+	q1mD := uint64(ringQ.Modulus[0] - ringQ.Modulus[0]/mdcr.params.T())
+	ringQm1, err := ring.NewRing(ringQ.N, ringQ.Modulus)
+	if err != nil {
+		panic(err)
+	}
+	ringQm1.Modulus[0] = q1mD
+	ringQm1.Reduce(pt.Value, pt.Value)
+	ringQ.InvNTT(pt.Value, pt.Value)
 
 	return pt
 }
